@@ -95,6 +95,7 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property (readonly, nonatomic, strong) NSURLSession *session;
 
+
 /**
  The operation queue on which delegate callbacks are run.
  */
@@ -189,8 +190,10 @@ NS_ASSUME_NONNULL_BEGIN
 
  @return A manager for a newly-created session.
  */
-- (instancetype)initWithSessionConfiguration:(nullable NSURLSessionConfiguration *)configuration NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithSessionConfiguration:(nullable NSURLSessionConfiguration *)configuration;
 
+
+- (instancetype)initWithSessionConfiguration:(nullable NSURLSessionConfiguration *)configuration ipHost:(nullable NSString *)ipHost;
 /**
  Invalidates the managed session, optionally canceling pending tasks.
 

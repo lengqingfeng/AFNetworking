@@ -471,6 +471,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
 #pragma mark -
 
 @interface AFURLSessionManager ()
+@property (readwrite, nonatomic, strong) NSString *ipOriginalHost;
 @property (readwrite, nonatomic, strong) NSURLSessionConfiguration *sessionConfiguration;
 @property (readwrite, nonatomic, strong) NSOperationQueue *operationQueue;
 @property (readwrite, nonatomic, strong) NSURLSession *session;
@@ -504,6 +505,10 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
 }
 
 - (instancetype)initWithSessionConfiguration:(NSURLSessionConfiguration *)configuration {
+    return [self initWithSessionConfiguration:configuration ipHost:nil];
+}
+
+- (instancetype)initWithSessionConfiguration:(nullable NSURLSessionConfiguration *)configuration ipHost:(NSString *)ipHost {
     self = [super init];
     if (!self) {
         return nil;
@@ -512,11 +517,15 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     if (!configuration) {
         configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
     }
-
+    
+    self.ipOriginalHost = ipHost;
+    
     self.sessionConfiguration = configuration;
 
     self.operationQueue = [[NSOperationQueue alloc] init];
     self.operationQueue.maxConcurrentOperationCount = 1;
+
+    self.session = [NSURLSession sessionWithConfiguration:self.sessionConfiguration delegate:self delegateQueue:self.operationQueue];
 
     self.responseSerializer = [AFJSONResponseSerializer serializer];
 
@@ -531,20 +540,17 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     self.lock = [[NSLock alloc] init];
     self.lock.name = AFURLSessionManagerLockName;
 
-    __weak typeof(self) weakSelf = self;
     [self.session getTasksWithCompletionHandler:^(NSArray *dataTasks, NSArray *uploadTasks, NSArray *downloadTasks) {
-        
-        __strong typeof(weakSelf) strongSelf = weakSelf;
         for (NSURLSessionDataTask *task in dataTasks) {
-            [strongSelf addDelegateForDataTask:task uploadProgress:nil downloadProgress:nil completionHandler:nil];
+            [self addDelegateForDataTask:task uploadProgress:nil downloadProgress:nil completionHandler:nil];
         }
 
         for (NSURLSessionUploadTask *uploadTask in uploadTasks) {
-            [strongSelf addDelegateForUploadTask:uploadTask progress:nil completionHandler:nil];
+            [self addDelegateForUploadTask:uploadTask progress:nil completionHandler:nil];
         }
 
         for (NSURLSessionDownloadTask *downloadTask in downloadTasks) {
-            [strongSelf addDelegateForDownloadTask:downloadTask progress:nil destination:nil completionHandler:nil];
+            [self addDelegateForDownloadTask:downloadTask progress:nil destination:nil completionHandler:nil];
         }
     }];
 
@@ -1001,26 +1007,56 @@ didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
     if (self.sessionDidReceiveAuthenticationChallenge) {
         disposition = self.sessionDidReceiveAuthenticationChallenge(session, challenge, &credential);
     } else {
-        if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {
-            if ([self.securityPolicy evaluateServerTrust:challenge.protectionSpace.serverTrust forDomain:challenge.protectionSpace.host]) {
-                credential = [NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust];
-                if (credential) {
-                    disposition = NSURLSessionAuthChallengeUseCredential;
+        if (self.ipOriginalHost.length > 0) {
+           if ([self evaluateServerTrust:challenge.protectionSpace.serverTrust forDomain:self.ipOriginalHost]) {
+                 disposition = NSURLSessionAuthChallengeUseCredential;
+                 credential = [NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust];
+             } else {
+                 disposition = NSURLSessionAuthChallengePerformDefaultHandling;
+             }
+        } else {
+           if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {
+                if ([self.securityPolicy evaluateServerTrust:challenge.protectionSpace.serverTrust forDomain:challenge.protectionSpace.host]) {
+                    credential = [NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust];
+                    if (credential) {
+                        disposition = NSURLSessionAuthChallengeUseCredential;
+                    } else {
+                        disposition = NSURLSessionAuthChallengePerformDefaultHandling;
+                    }
                 } else {
-                    disposition = NSURLSessionAuthChallengePerformDefaultHandling;
+                    disposition = NSURLSessionAuthChallengeCancelAuthenticationChallenge;
                 }
             } else {
-                disposition = NSURLSessionAuthChallengeCancelAuthenticationChallenge;
+                disposition = NSURLSessionAuthChallengePerformDefaultHandling;
             }
-        } else {
-            disposition = NSURLSessionAuthChallengePerformDefaultHandling;
         }
-    }
+        }
+ 
 
     if (completionHandler) {
         completionHandler(disposition, credential);
     }
 }
+
+#pragma mark - NSURLConnectionDelegate
+- (BOOL)evaluateServerTrust:(SecTrustRef)serverTrust
+                  forDomain:(NSString *)domain {
+    
+    NSMutableArray *policies = [NSMutableArray array];
+    if (domain) {
+        [policies addObject:(__bridge_transfer id)SecPolicyCreateSSL(true, (__bridge CFStringRef)domain)];
+    } else {
+        [policies addObject:(__bridge_transfer id)SecPolicyCreateBasicX509()];
+    }
+
+    SecTrustSetPolicies(serverTrust, (__bridge CFArrayRef)policies);
+
+    SecTrustResultType result;
+    SecTrustEvaluate(serverTrust, &result);
+
+    return (result == kSecTrustResultUnspecified || result == kSecTrustResultProceed);
+}
+
 
 #pragma mark - NSURLSessionTaskDelegate
 

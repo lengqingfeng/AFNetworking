@@ -132,7 +132,12 @@ NS_ASSUME_NONNULL_BEGIN
  @return The newly-initialized HTTP client
  */
 - (instancetype)initWithBaseURL:(nullable NSURL *)url
-           sessionConfiguration:(nullable NSURLSessionConfiguration *)configuration NS_DESIGNATED_INITIALIZER;
+           sessionConfiguration:(nullable NSURLSessionConfiguration *)configuration;
+
+
+- (instancetype)initWithBaseURL:(nullable NSURL *)url
+           sessionConfiguration:(nullable NSURLSessionConfiguration *)configuration
+                 ipOriginalHost:(nullable NSString *)ipOriginalHost;
 
 ///---------------------------
 /// @name Making HTTP Requests

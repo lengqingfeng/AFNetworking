@@ -64,9 +64,15 @@
 }
 
 - (instancetype)initWithBaseURL:(NSURL *)url
+           sessionConfiguration:(NSURLSessionConfiguration *)configuration {
+    return [self initWithBaseURL:url sessionConfiguration:configuration ipOriginalHost:nil];
+}
+
+- (instancetype)initWithBaseURL:(NSURL *)url
            sessionConfiguration:(NSURLSessionConfiguration *)configuration
+                 ipOriginalHost:(NSString *)ipOriginalHost
 {
-    self = [super initWithSessionConfiguration:configuration];
+    self = [super initWithSessionConfiguration:configuration ipHost:ipOriginalHost];
     if (!self) {
         return nil;
     }
